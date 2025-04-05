@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Global Politics Simulator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Controls Sidebar -->
+        <div id="notifications" style="position: fixed; top: 10px; right: 10px; z-index: 1000;"></div>
+        <div class="controls">
+            <button id="startSim">Start Simulation</button>
+            <div class="input-group">
+                <input type="number" id="countryCount" placeholder="Countries" min="2" max="10">
+            </div>
+            
+            <h3>Admin Actions</h3>
+            <div class="input-group">
+                <select id="actionType">
+                    <option value="declare_war">Declare War</option>
+                    <option value="add_money">Add Money</option>
+                </select>
+                <input type="text" id="countryId" placeholder="Country ID">
+                <input type="text" id="targetId" placeholder="Target ID (for war)">
+                <input type="number" id="amount" placeholder="Amount">
+                <button id="sendAction">Execute</button>
+            </div>
+        </div>
+
+        <!-- Country List -->
+        <div class="country-list" id="countryList"></div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
