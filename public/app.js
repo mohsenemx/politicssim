@@ -22,8 +22,35 @@ ws.onmessage = (event) => {
         case 'war_declaration':
             showWarNotification(data.message);
             break;
+
+        case 'country_annihilated':
+            showAnnihilationNotification(data.message);
+            removeCountryCard(data.countryId);
+            break;
     }
 };
+
+function showAnnihilationNotification(message) {
+    const notificationContainer = document.getElementById('notifications');
+    if (!notificationContainer) return;
+
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.textContent = message;
+    notificationContainer.appendChild(notification);
+
+    // Remove notification after 5 seconds
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+}
+
+function removeCountryCard(countryId) {
+    const card = document.getElementById(`country-card-${countryId}`);
+    if (card) {
+        card.remove();
+    }
+}
 function showWarNotification(message) {
     const notificationContainer = document.getElementById('notifications');
     if (!notificationContainer) return;

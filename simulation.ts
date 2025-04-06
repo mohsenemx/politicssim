@@ -33,7 +33,6 @@ export class Simulation {
     private interval: NodeJS.Timeout | null = null;
     public isRunning = false;
     private tickCount = 0;
-
     constructor(
         private countryManager: CountryManager,
         private subscriptionManager: SubscriptionManager
@@ -93,15 +92,17 @@ export class Simulation {
             let change = 0;
             switch (resource) {
                 case 'Oil':
-                case 'Coal':
-                    change = Math.random() * 50 - 20; // Higher fluctuation
+                    change = Math.random() * 150 - 60; // Higher fluctuation
+                    break;
+                case 'Iron':
+                    change = Math.random() * 90 - 20; // Higher fluctuation
                     break;
                 case 'Uranium':
                 case 'RareEarthMetals':
-                    change = Math.random() * 30 - 10; // Moderate fluctuation
+                    change = Math.random() * 10 - 5; // Moderate fluctuation
                     break;
                 default:
-                    change = Math.random() * 70 - 20; // Higher base production
+                    change = Math.random() * 40 - 20; // Higher base production
             }
             country.resources[resource] = Math.max(0, Math.floor(country.resources[resource] + change));
         });
@@ -114,19 +115,88 @@ export class Simulation {
             war.progress += 0.5 + Math.random() * 1.5;
             war.progress = Math.min(100, war.progress);
     
+            // Calculate equipment loss based on war progress
             if (war.progress >= 100) {
                 this.resolveWar(country, enemyId);
+            } else {
+                this.applyWarDamage(country, enemyId, war.progress);
             }
         });
     }
+    private applyWarDamage(attacker: Country, defenderId: string, progress: number): void {
+        const defender = this.countryManager.getCountry(defenderId);
+        if (!defender) return;
     
+        const attackerPower = this.calculateMilitaryPower(attacker);
+        const defenderPower = this.calculateMilitaryPower(defender);
+    
+        // Determine damage multiplier based on war progress and relative power
+        const damageMultiplier = progress / 100; // Scales from 0 to 1 as war progresses
+        const attackerDamageFactor = 1 - (attackerPower / (attackerPower + defenderPower));
+        const defenderDamageFactor = 1 - (defenderPower / (attackerPower + defenderPower));
+    
+        // Apply damage to attacker
+        this.damageEquipment(attacker, attackerDamageFactor * damageMultiplier);
+    
+        // Apply damage to defender
+        this.damageEquipment(defender, defenderDamageFactor * damageMultiplier);
+    }
+    private transferResourcesAndEquipment(winner: Country, loser: Country): void {
+        // Transfer resources
+        Object.keys(loser.resources).forEach(resource => {
+            winner.resources[resource] += loser.resources[resource];
+            loser.resources[resource] = 0;
+        });
+    
+        // Transfer military equipment
+        Object.assign(winner.militaryEquipment.groundForces, loser.militaryEquipment.groundForces);
+        Object.assign(winner.militaryEquipment.airForces, loser.militaryEquipment.airForces);
+        Object.assign(winner.militaryEquipment.navalForces, loser.militaryEquipment.navalForces);
+        Object.assign(winner.militaryEquipment.defenseSystems, loser.militaryEquipment.defenseSystems);
+    
+        console.log(`[${winner.name}] has taken all resources and equipment from [${loser.name}].`);
+    }
+    private damageEquipment(country: Country, damageFactor: number): void {
+        const equipmentLoss = (value: number) => Math.max(0, value - Math.floor(value * damageFactor));
+    
+        // Damage ground forces
+        country.militaryEquipment.groundForces.mainBattleTanks = equipmentLoss(country.militaryEquipment.groundForces.mainBattleTanks);
+        country.militaryEquipment.groundForces.infantryFightingVehicles = equipmentLoss(country.militaryEquipment.groundForces.infantryFightingVehicles);
+        country.militaryEquipment.groundForces.artillery = equipmentLoss(country.militaryEquipment.groundForces.artillery);
+    
+        // Damage air forces
+        country.militaryEquipment.airForces.fighterJets = equipmentLoss(country.militaryEquipment.airForces.fighterJets);
+        country.militaryEquipment.airForces.attackHelicopters = equipmentLoss(country.militaryEquipment.airForces.attackHelicopters);
+    
+        // Damage naval forces
+        country.militaryEquipment.navalForces.destroyers = equipmentLoss(country.militaryEquipment.navalForces.destroyers);
+        country.militaryEquipment.navalForces.submarines = equipmentLoss(country.militaryEquipment.navalForces.submarines);
+    
+        // Damage defense systems
+        country.militaryEquipment.defenseSystems.surfaceToAirMissiles = equipmentLoss(country.militaryEquipment.defenseSystems.surfaceToAirMissiles);
+        country.militaryEquipment.defenseSystems.ballisticMissileDefense = equipmentLoss(country.militaryEquipment.defenseSystems.ballisticMissileDefense);
+    
+        console.log(`[${country.name}] suffered war damage. Remaining tanks: ${country.militaryEquipment.groundForces.mainBattleTanks}`);
+    }
     private updateRelations(country: Country): void {
         Object.entries(country.relations).forEach(([neighborId, relation]) => {
             const neighbor = this.countryManager.getCountry(neighborId);
             if (!neighbor || neighbor.isAnnihilated) return;
     
-            // Update relation strength
-            relation.strength += Math.random() * 2 - 1;
+            // Calculate ideological distance
+            const ideologicalDistance = Math.abs(country.ideologyScore - neighbor.ideologyScore);
+    
+            // Adjust relation strength based on ideological distance
+            let relationChange = 0;
+            if (ideologicalDistance === 0) {
+                relationChange = Math.random() * 2 - 0.5; // Small positive fluctuation for aligned ideologies
+            } else if (ideologicalDistance === 1) {
+                relationChange = Math.random() * 2 - 1; // Neutral fluctuation for moderately different ideologies
+            } else if (ideologicalDistance === 2) {
+                relationChange = Math.random() * 2 - 1.5; // Larger negative fluctuation for opposing ideologies
+            }
+    
+            relation.strength += relationChange;
             relation.strength = Math.max(-100, Math.min(100, relation.strength));
             relation.lastUpdated = this.tickCount;
     
@@ -148,6 +218,20 @@ export class Simulation {
     private declareWar(attacker: Country, defender: Country): void {
         // Avoid duplicate wars
         if (attacker.wars[defender.id] || defender.wars[attacker.id]) return;
+    
+        // Calculate ideological distance
+        const ideologicalDistance = Math.abs(attacker.ideologyScore - defender.ideologyScore);
+    
+        // Reduce war likelihood for aligned ideologies
+        const warLikelihood = ideologicalDistance === 0 ? 0.1 : // 10% chance for aligned ideologies
+                              ideologicalDistance === 1 ? 0.3 : // 30% chance for moderately different ideologies
+                              ideologicalDistance === 2 ? 0.6 : // 60% chance for opposing ideologies
+                              0.5; // Default to 50% if ideological distance is unrecognized
+    
+        if (Math.random() > warLikelihood) {
+            console.log(`[${attacker.name}] chose not to declare war on [${defender.name}] due to ideological alignment.`);
+            return;
+        }
     
         // Declare war
         attacker.wars[defender.id] = {
@@ -176,7 +260,7 @@ export class Simulation {
     private broadcastUpdates(): void {
         this.countryManager.getAllCountries().forEach((country, id) => {
             if (!country.isAnnihilated) {
-                this.subscriptionManager.broadcastUpdate(id, {
+                this.subscriptionManager.broadcastUpdate(country.id, {
                     type: 'country_update',
                     country: {
                         id: country.id,
@@ -218,6 +302,7 @@ export class Simulation {
     
                 // Deduct funds and materials
                 country.economy -= cost.cost * unitsToProduce;
+                country.economy = Math.max(0, country.economy); // Ensure economy doesn't go negative
                 Object.entries(cost.materials).forEach(([resource, amount]) => {
                     resources[resource] -= amount * unitsToProduce;
                 });
@@ -243,6 +328,10 @@ export class Simulation {
     
                 producedSomething = true;
             }
+        }
+    
+        if (!producedSomething) {
+            console.log(`[${country.name}] Could not afford any equipment production this tick.`);
         }
     }
     
@@ -324,6 +413,7 @@ export class Simulation {
     
         switch (outcome) {
             case 'annihilation':
+                this.transferResourcesAndEquipment(country, defender);
                 this.annihilateCountry(defender.id);
                 break;
             case 'surrender':
@@ -334,7 +424,6 @@ export class Simulation {
                 break;
         }
     }
-
     private calculateMilitaryPower(country: Country): number {
         return (
             country.militaryEquipment.groundForces.mainBattleTanks * 10 +
@@ -347,6 +436,7 @@ export class Simulation {
         const country = this.countryManager.getCountry(countryId);
         if (!country) return;
     
+        // Mark the country as annihilated
         country.isAnnihilated = true;
         country.economy = 0;
         country.resources = {} as Resources;
@@ -357,8 +447,23 @@ export class Simulation {
             defenseSystems: { ...country.militaryEquipment.defenseSystems, surfaceToAirMissiles: 0 }
         };
     
-        // Remove subscriptions but keep wars
-        this.subscriptionManager.removeCountry(countryId);
+        // Broadcast a global notification
+        this.subscriptionManager.broadcastGlobal({
+            type: 'country_annihilated',
+            message: `${country.name} has been annihilated!`,
+            countryName: country.name,
+            countryId: country.id
+        });
+    
+        // Broadcast a targeted update to remove the country from the frontend
+        this.subscriptionManager.broadcastUpdate(countryId, {
+            type: 'country_annihilated',
+            country: {
+                id: country.id,
+                name: country.name,
+                isAnnihilated: true
+            }
+        });
     
         console.log(`[${country.name}] has been annihilated.`);
     }

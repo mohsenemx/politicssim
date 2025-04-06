@@ -12,7 +12,7 @@ wss.on('connection', (ws) => {
     console.log('Client connected');
 
     // Send initial country list if simulation is running
-    if (countryManager.getAllCountries().size > 0) {
+    if (countryManager.getAllCountries().length > 0) {
         ws.send(JSON.stringify({
             type: 'country_list',
             countries: Array.from(countryManager.getAllCountries().values()).map(c => ({
